@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -eu
+
+interface=wlp58s0
+[[ -z "$interface" ]] && echo "Error: network interface  not defined" && exit 1
+
+scan_results="/var/tmp/scan_results.txt"
+
+function extract_info {
+  while read line;
+  do
+    if [[ "$line" =~ signal: ]]
+    then
+      signal=${line#signal: }
+    elif [[ "$line" =~ SSID: ]]
+    then
+      ssid=${line#SSID: }
+      printf '%3s  %-30s\n' "$signal" "'$ssid'"
+    fi
+  done
+}
+
+function extract_ssid {
+  (grep "$1)" < "$scan_results") | awk -F "'" '{ print $2 }'
+}
+
+function find_wpa_net_id {
+  if [[ "$1" =~ ^[0-9]$ ]]
+  then
+    find_wpa_net_id $(extract_ssid $1)
+  else
+    local ssid="$*"
+    wpa_cli -i "$interface" list_networks |
+      tail -n +2 |
+      grep -i "$ssid" |
+      awk '{ print $1 }'
+  fi
+}
+
+function usage {
+  echo "Usage:"
+  echo "  wpa_select l"
+  echo "    List available networks"
+  echo "  wpa_select c [ID, SSID]"
+  echo "    Connect to network by ID/SSID"
+  echo "  wpa_select a [ID]"
+  echo "    Add network by ID"
+}
+
+case "$1" in
+  t) find_wpa_net_id "$2"
+     ;;
+  l)
+    iw dev "$interface" scan |
+      grep -E 'SSID:|signal' |
+      extract_info |
+      sort |
+      awk '{ printf("%s) %20s\n", NR, $0); }' |
+      tee "$scan_results"
+
+    exit 0
+    ;;
+  c)
+    id=$(find_wpa_net_id "$2")
+
+    if [ -n "$id" ]
+    then
+      wpa_cli -i "$interface" enable_network "$id" &&
+      wpa_cli -i "$interface" select_network "$id"
+      exit $?
+    else
+      echo "Access point not configured. Add new entry? (y/n)"
+      read -p '' res
+
+      if [[ "$res" = y ]]
+      then
+	wpa_select a "$2"
+      else
+	exit 0
+      fi
+    fi
+    ;;
+  a)
+    ssid=$(extract_ssid "$2")
+    read  -p 'psk: ' psk
+    id=$(wpa_cli -i "$interface" add_network)
+
+    wpa_cli -i "$interface" set_network "$id" ssid "\"$ssid\"" &&
+    wpa_cli -i "$interface" set_network "$id" psk "\"$psk\"" &&
+    wpa_cli -i "$interface" save_config
+
+    exit $?
+    ;;
+  h)
+    usage
+    ;;
+  *)
+    echo "Unknown command"
+    echo
+    usage
+
+    exit 1
+    ;;
+esac
