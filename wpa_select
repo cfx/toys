@@ -21,7 +21,7 @@ function extract_info {
 }
 
 function extract_ssid {
-  (grep "$1)" < "$scan_results") | awk -F "'" '{ print $2 }'
+  (grep -E "^$1\).*" < "$scan_results") | awk -F "'" '{ print $2 }'
 }
 
 function find_wpa_net_id {
