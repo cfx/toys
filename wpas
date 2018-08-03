@@ -5,6 +5,7 @@ interface=wlp58s0
 [[ -z "$interface" ]] && echo "Error: network interface not defined" && exit 1
 
 scan_results="/var/tmp/scan_results.txt"
+[[ -f "$scan_results" ]] || touch "$scan_results"
 
 function extract_info {
   while read line;
@@ -23,9 +24,9 @@ function extract_info {
 function extract_ssid {
   if [[ "$1" =~ ^[0-9]$ ]]
   then
-    grep -E "^$1\).*" 
+    grep -E "^$1\).*"
   else
-    grep -i "$1" 
+    grep -i "$1"
   fi < "$scan_results" | awk -F "'" '{ print $2 }'
 }
 
@@ -107,7 +108,7 @@ case "$1" in
     id=$(wpa_cli -i "$interface" add_network)
 
     echo -n "Adding $ssid..."
-    wpa_cli -i "$interface" set_network "$id" ssid "\"$ssid\"" | 
+    wpa_cli -i "$interface" set_network "$id" ssid "\"$ssid\"" |
       grep OK > /dev/null &&
       wpa_cli -i "$interface" set_network "$id" psk "\"$psk\"" |
       grep OK > /dev/null &&
